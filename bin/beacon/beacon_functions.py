@@ -4,7 +4,7 @@ import os
 import sys
 import subprocess
 import re
-from ..server.agent import Agent
+from ..server.Classes import Agent
 
 class Beacon():
     def __init__(self, agent: Agent):
