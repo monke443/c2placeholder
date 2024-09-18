@@ -14,15 +14,16 @@ class Agent():
             os.makedirs(self.path)
 
     def get_task_file(self):
-        return f"data/agents/{self.name}/task"
+        return f"../../data/tasks"
     
-
-
+    def get_beacon_path(self):
+        return f"../../data/beacons"
+    
+   
 #finish this
  #   def change_config(self, config_path):
   #      with open (config_path, "w") as f:
    #         f.write(data)
-
 
     def read_task(self):
         task_file = self.get_task_file()
@@ -33,16 +34,12 @@ class Agent():
 
                 if task.strip() != "0":        #After reading the task, clear if it hasn't been cleared
                     self.clear_task(task_file) 
-
             return (task, 200)
-        else:
-            return ('', 204)
+        return ('', 204)
         
-
     def clear_task(self, task_file):
         with open (task_file, "w") as f:
             f.write("0")
-
 
     def write_task(self, task):
         task_file = self.get_task_file()
@@ -51,14 +48,7 @@ class Agent():
         if os.path.exists(task_file):
             with open (task_file, "w") as f:
                 f.write(task)
+        
 
-        return reflected_output
 
-
-    def register_agent():
-        name = ""
-        remote_ip = ""
-        remote_hostname = ""
-        #write_database()     #Define the function later to save data in DB
-        return (name, 200)
     
