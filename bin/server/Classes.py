@@ -10,14 +10,12 @@ class Agent():
         self.path =  path
         self.config = config 
           
-        if not os.path.exists (self.path):
-            os.makedirs(self.path)
 
     def get_task_file(self):
-        return f"../../data/tasks"
+        return "/home/exe/data/tasks"
     
     def get_beacon_path(self):
-        return f"../../data/beacons"
+        return "/home/exe/data/beacons"
     
    
 #finish this
@@ -48,6 +46,8 @@ class Agent():
         if os.path.exists(task_file):
             with open (task_file, "w") as f:
                 f.write(task)
+
+        return (reflected_output, 200)
         
 
 

