@@ -9,6 +9,7 @@ class Beacon(db.Model):
     hostname = db.Column(db.String(100))
     permissions = db.Column(db.String(20))
     registration_time = db.Column(db.DateTime, default=datetime.utcnow)
+    alive = db.Column(db.Boolean, default=True)
 
 class Task(db.Model):
     task_id = db.Column(db.String(36), primary_key=True)
@@ -24,7 +25,6 @@ class Result(db.Model):
     task_id = db.Column(db.String(36), db.ForeignKey('task.task_id'), nullable=False)
     output = db.Column(db.Text, nullable=False)
     received_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
 
 class Agent(db.Model):
     id = db.Column(db.String(36), primary_key=True)
@@ -32,4 +32,3 @@ class Agent(db.Model):
     path = db.Column(db.Text)
     key = db.Column(db.Text)
     config = db.Column(db.Text)
-

