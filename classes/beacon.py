@@ -13,7 +13,7 @@ class Beacon:
         self.remote_hostname = self.get_hostname() if self.get_hostname() else "unknown"
         self.remote_permissions = self.get_permissions()[1]
         self.alive = alive
-        self.callback = self.next_callback()
+        self.callback = self.next_callback()    #### placeholder
 
 
     ## This are all testing functions to test the register_beacon endpoint
@@ -56,7 +56,7 @@ class Beacon:
             print("Beacon is not registered!")
             return
 
-        response = requests.get(f"http://localhost:5000/c2/read_task?beacon_id={self.beacon_id}")
+        response = requests.get(f"http://localhost/c2/read_task?beacon_id={self.beacon_id}")
         if response.status_code == 200:
             tasks = response.json().get('data').get('tasks', [])
             if tasks:

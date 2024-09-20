@@ -52,8 +52,23 @@ def handle_read_task(request):
     if not beacon.alive:
         return jsonify({"status": "failure", "message": "Beacon is not alive", "data": {}}), 404
 
-    tasks = Task.query.filter_by(beacon_id=beacon_id).all()
-    task_list = [task.task for task in tasks]
+    tasks = Task.query.filter_by(beacon_id=beacon_id).order_by(Task.task_order).all()     # is this even necesary?
+    task_list = [{"task": task.task_content, "task_order": task.task_order} for task in tasks]
+
+
+# This should return something like this
+    """{
+  "status": "success",
+  "message": "Tasks fetched successfully",
+  "data": {
+    "tasks": [
+      {"task": "First task for the beacon", "task_order": 1},
+      {"task": "Second task for the beacon", "task_order": 2},
+      {"task": "Third task for the beacon", "task_order": 3}
+    ]
+  }
+}
+"""
 
     return jsonify({
         "status": "success",
@@ -80,13 +95,19 @@ def handle_write_task(request):
         if not beacon.alive:
             return jsonify({"status": "failure", "message": "Beacon is not alive", "data": {}}), 404
 
+        highest_task_order = db.session.query(db.func.max(Task.task_order)).filter_by(beacon_id=beacon_id).scalar()
+        next_task_order = (highest_task_order or 0) + 1
+        
+
         task_id = str(uuid.uuid4())
         new_task = Task(
             task_id=task_id,
             beacon_id=beacon_id,
             task=task_content,
-            status="pending"
+            status="pending",
+            task_order= next_task_order
         )
+
         db.session.add(new_task)
         db.session.commit()
 
@@ -132,6 +153,12 @@ def handle_return_beacon_data(request):
             task.status = "completed"
             task.completed_at = datetime.datetime.utcnow()
             db.session.commit()
+
+            completed_task_order = task.task_order
+            remaining_task = Task.query.filter(Task.beacon_id==beacon_id, Task.task_order > completed_task_order).all()
+
+            for remaining_task in remaining_task:
+                remaining_task.task_order -= 1
 
         beacon.alive = True
         db.session.commit()

@@ -19,6 +19,7 @@ class Task(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime, nullable=True)
     beacon = db.relationship('Beacon', backref='tasks')
+    task_order = db.Column (db.Integer, nullable=True, default=0, server_default="0", index=True)
 
 class Result(db.Model):
     result_id = db.Column(db.String(36), primary_key=True)
