@@ -1,7 +1,7 @@
 from flask import request, jsonify
 from werkzeug.exceptions import BadRequest
-from app.database import db, Beacon, Task, Result
-from app.services import handle_register_beacon, handle_read_task, handle_write_task, handle_return_beacon_data, handle_clear_beacons_db
+from database import db, Beacon, Task, Result
+from services import handle_register_beacon, handle_read_task, handle_write_task, handle_return_beacon_data, handle_clear_beacons_db
 
 def register_routes(app):
     @app.route("/")

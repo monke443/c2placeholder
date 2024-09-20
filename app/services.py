@@ -1,6 +1,6 @@
 from flask import jsonify
 from werkzeug.exceptions import BadRequest
-from app.database import db, Beacon, Task, Result
+from database import db, Beacon, Task, Result
 import uuid
 import datetime
 
@@ -145,7 +145,7 @@ def handle_return_beacon_data(request):
     except Exception as e:
         return jsonify({"status": "failure", "message": f"Failed to save result: {str(e)}", "data": {}}), 500
 
-def handle_clear_beacons_db(request):
+def handle_delete_beacon_from_db(request):
     try:
         data = request.json
         if not data:

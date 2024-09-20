@@ -15,6 +15,8 @@ class Beacon:
         self.alive = alive
         self.callback = self.next_callback()
 
+
+    ## This are all testing functions to test the register_beacon endpoint
     def get_ip(self):
         result = subprocess.run(['ip', 'addr'], capture_output=True, text=True, check=True)
         ip_pattern = re.compile(r'inet (\d+\.\d+\.\d+\.\d+)')
@@ -30,6 +32,8 @@ class Beacon:
         except subprocess.CalledProcessError:
             return "unknown", False
 
+
+    ## Used by the server to register the beacon into the database on first call
     def register_beacon(self):
         response = requests.post(
             f"http://localhost/c2/register_beacon",
@@ -45,6 +49,8 @@ class Beacon:
         else:
             print(f"Error: {response.status_code}, {response.text}")
 
+
+    ## Placeholder testing, used by the beacon to fetch tasks from the server
     def fetch_tasks(self):
         if not self.beacon_id:
             print("Beacon is not registered!")
@@ -60,6 +66,8 @@ class Beacon:
         else:
             print(f"Error fetching tasks: {response.status_code}")
 
+
+    ## This is used to modify the beacon from the database
     def write_new_beacon(self):
         new_beacon = BeaconDB(
             id=self.beacon_id,
@@ -75,6 +83,7 @@ class Beacon:
             print(f"Error saving beacon: {str(e)}")
 
 
+    ## Didn't test, I dont think this is the right way to do it, probably just overcomplicating it 
     def next_callback(self):
         if not self.alive:
             return
@@ -90,3 +99,17 @@ class Beacon:
                 db.session.commit()
             else:
                 print(f"Beacon {self.beacon_id} is alive, next callback in {diff.total_seconds()} seconds")
+
+    
+    ## Used by the client to delete a beacon from the database
+    def delete_beacon(self):
+        data = requests.post(
+            f"http://localhost/c2/delete_beacon",
+            json={"beacon_id": self.beacon_id}
+        )
+
+        # Just in case its needed for debugging
+        if data.status_code == 200:
+            print("Beacon deleted", data.json().get("message"))
+        else:
+            print(f"Error: {data.status_code}, {data.text}")
